@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- GLOBAL SAFETY NET ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isAdmin() { 
+      // Relying on a field in the user document is safer than client-side roles
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- VALIDATION HELPERS ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'email', 'avatar', 'role', 'google_id']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.avatar is string && data.avatar.size() <= 600 &&
+             data.role in ['admin', 'user'] &&
+             data.google_id is string;
+    }
+
+    function isValidTeam(data) {
+      return data.keys().hasAll(['nama']) &&
+             data.nama is string && data.nama.size() <= 100;
+    }
+
+    function isValidActivity(data) {
+      return data.keys().hasAll(['nama', 'team_id']) &&
+             data.nama is string && data.nama.size() <= 100 &&
+             data.team_id is string;
+    }
+
+    function isValidReport(data) {
+      // Keys expected from the frontend payload
+      let requiredKeys = [
+        'user_id', 'userName', 'team_id', 'teamName', 
+        'activity_id', 'activityName', 'subActivityName', 
+        'tanggal', 'jam', 'penjelasan'
+      ];
+      return data.keys().hasAll(requiredKeys) &&
+             data.user_id == request.auth.uid &&
+             data.tanggal is string &&
+             data.jam is string &&
+             data.penjelasan is string && data.penjelasan.size() <= 10000;
+    }
+
+    // --- MATCH BLOCKS ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      // Auto-registration for users, but cannot self-promote to admin
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && incoming().role == 'user';
+      
+      allow update: if isSignedIn() && (
+        // Owners can update their folder ID or details, but role updates must be admin only or prevented from self-promotion
+        (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'gdrive_folder_id'])) ||
+        isAdmin()
+      );
+    }
+
+    match /teams/{teamId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /activities/{activityId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && (isOwner(existing().user_id) || isAdmin());
+      // Secure list query - rule must validate the resource being queried
+      allow list: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && isValidReport(incoming());
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (isOwner(existing().user_id) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['penjelasan', 'updatedAt']))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

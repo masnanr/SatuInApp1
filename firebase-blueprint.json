@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with role-based access",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "google_id": { "type": "string" },
+        "avatar": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "gdrive_folder_id": { "type": "string" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Organizational team within the institution",
+      "type": "object",
+      "properties": {
+        "nama": { "type": "string" }
+      },
+      "required": ["nama"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Broad category of work under a team",
+      "type": "object",
+      "properties": {
+        "team_id": { "type": "string" },
+        "nama": { "type": "string" }
+      },
+      "required": ["team_id", "nama"]
+    },
+    "Report": {
+      "title": "Activity Report",
+      "description": "Daily activity logs submitted by users",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "userName": { "type": "string" },
+        "team_id": { "type": "string" },
+        "teamName": { "type": "string" },
+        "activity_id": { "type": "string" },
+        "activityName": { "type": "string" },
+        "subActivityName": { "type": "string" },
+        "tanggal": { "type": "string", "format": "date" },
+        "jam": { "type": "string" },
+        "penjelasan": { "type": "string" },
+        "pdf_link": { "type": "string" },
+        "attachment_link": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "team_id", "activity_id", "tanggal", "jam", "penjelasan"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Profiles of system users"
+    },
+    "teams/{teamId}": {
+      "schema": "Team",
+      "description": "List of institutional teams"
+    },
+    "teams/{teamId}/members/{userId}": {
+      "schema": { "type": "object", "properties": { "role": { "type": "string" } } },
+      "description": "Membership list for each team"
+    },
+    "activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Activities mapped to teams"
+    },
+    "reports/{reportId}": {
+      "schema": "Report",
+      "description": "Central collection for all reports"
+    }
+  }
+}
