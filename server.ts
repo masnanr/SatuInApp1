@@ -12,10 +12,13 @@ dotenv.config();
 
 let db: any;
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
+// Export app for serverless environments (like Vercel)
+export default app;
+
+async function initFirebase() {
   // Load config with fallback for Vercel
   let firebaseConfig: any = {};
   try {
@@ -56,12 +59,16 @@ async function startServer() {
     databaseId: firebaseConfig.firestoreDatabaseId,
     envProject: process.env.GOOGLE_CLOUD_PROJECT || 'not set'
   });
+}
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Global initialization
+initFirebase().catch(err => console.error('Firebase init failed:', err));
 
-  // API Routes
-  app.get('/api/health', async (req, res) => {
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// API Routes
+app.get('/api/health', async (req, res) => {
     try {
       // Test Firestore connection
       const testDoc = await db.collection('_health_check').doc('ping').get();
@@ -167,6 +174,8 @@ async function startServer() {
     res.json({ success: true, message: 'Sync started' });
   });
 
+// Setup static files and Vite
+const setupServer = async () => {
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -182,13 +191,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SatuInApp Server running status:
-    - Mode: ${process.env.NODE_ENV || 'development'}
-    - URL: http://localhost:${PORT}`);
-  });
-}
+  // Only start listening if not in a serverless environment like Vercel
+  if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`SatuInApp Server running status:
+      - Mode: ${process.env.NODE_ENV || 'development'}
+      - URL: http://localhost:${PORT}`);
+    });
+  }
+};
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-});
+setupServer().catch(err => console.error('Server setup failed:', err));
